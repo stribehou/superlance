@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 ##############################################################################
 #
 # Copyright (c) 2007 Agendaless Consulting and Contributors.
@@ -68,6 +69,10 @@ Options:
       be used in the email subject to identify which memmon process
       restarted the process.
 
+-k -- optionally specify the Unix signal to be used when killing the process.
+      signal can be specified as either its number or its name.
+      E.G 9 or 'KILL'.
+
 The -p and -g options may be specified more than once, allowing for
 specification of multiple groups and processes.
 
@@ -100,7 +105,7 @@ def shell(cmd):
         return f.read()
 
 class Memmon:
-    def __init__(self, cumulative, programs, groups, any, sendmail, email, email_uptime_limit, name, rpc=None):
+    def __init__(self, cumulative, programs, groups, any, sendmail, email, email_uptime_limit, name, kill_signal, rpc=None):
         self.cumulative = cumulative
         self.programs = programs
         self.groups = groups
@@ -109,6 +114,7 @@ class Memmon:
         self.email = email
         self.email_uptime_limit = email_uptime_limit
         self.name = name
+        self.kill_signal = kill_signal 
         self.rpc = rpc
         self.stdin = sys.stdin
         self.stdout = sys.stdout
@@ -157,15 +163,15 @@ class Memmon:
                 group = info['group']
                 pname = '%s:%s' % (group, name)
 
+
                 if not pid:
                     # ps throws an error in this case (for processes
                     # in standby mode, non-auto-started).
                     continue
 
+
                 rss = self.calc_rss(pid)
                 if rss is None:
-                    # no such pid (deal with race conditions) or
-                    # rss couldn't be calculated for other reasons
                     continue
 
                 for n in name, pname:
@@ -197,7 +203,10 @@ class Memmon:
         uptime = info['now'] - info['start'] #uptime in seconds
         self.stderr.write('Restarting %s\n' % name)
         try:
-            self.rpc.supervisor.stopProcess(name)
+            if self.kill_signal is not None:
+                self.rpc.supervisor.signalProcess(name, self.kill_signal)
+            else:
+                self.rpc.supervisor.stopProcess(name)
         except xmlrpclib.Fault as e:
             msg = ('Failed to stop process %s (RSS %s), exiting: %s' %
                    (name, rss, e))
@@ -338,7 +347,7 @@ def parse_seconds(option, value):
 help_request = object()  # returned from memmon_from_args to indicate --help
 
 def memmon_from_args(arguments):
-    short_args = "hcp:g:a:s:m:n:u:"
+    short_args = "hcp:g:a:s:m:n:u:k:"
     long_args = [
         "help",
         "cumulative",
@@ -349,6 +358,7 @@ def memmon_from_args(arguments):
         "email=",
         "uptime=",
         "name=",
+        "kill_signal=",
         ]
 
     if not arguments:
@@ -366,6 +376,7 @@ def memmon_from_args(arguments):
     email = None
     uptime_limit = maxint
     name = None
+    signal = None
 
     for option, value in opts:
 
@@ -398,6 +409,9 @@ def memmon_from_args(arguments):
 
         if option in ('-n', '--name'):
             name = value
+        
+        if option in ('-k', '--kill_signal'):
+            signal = value
 
     memmon = Memmon(cumulative=cumulative,
                     programs=programs,
@@ -406,7 +420,8 @@ def memmon_from_args(arguments):
                     sendmail=sendmail,
                     email=email,
                     email_uptime_limit=uptime_limit,
-                    name=name)
+                    name=name,
+                    kill_signal=signal)
     return memmon
 
 def main():
@@ -420,3 +435,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
