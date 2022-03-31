@@ -214,7 +214,7 @@ class Memmon:
                         'failed to stop process %s, exiting' % name
                     )
                     self.mail(self.email, subject, msg)
-            raise
+                raise
 
         else:
             self.stderr.write('Restarting %s with supervisor configured signal\n' % name)
