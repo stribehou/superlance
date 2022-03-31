@@ -201,35 +201,49 @@ class Memmon:
     def restart(self, name, rss):
         info = self.rpc.supervisor.getProcessInfo(name)
         uptime = info['now'] - info['start'] #uptime in seconds
-        self.stderr.write('Restarting %s\n' % name)
-        try:
-            if self.kill_signal is not None:
+
+        if self.kill_signal is not None:
+            self.stderr.write('Sending %s signal %s' %(name,self.kill_signal))
+            try:
                 self.rpc.supervisor.signalProcess(name, self.kill_signal)
-            else:
-                self.rpc.supervisor.stopProcess(name)
-        except xmlrpclib.Fault as e:
-            msg = ('Failed to stop process %s (RSS %s), exiting: %s' %
-                   (name, rss, e))
-            self.stderr.write(str(msg))
-            if self.email:
-                subject = self.format_subject(
-                    'failed to stop process %s, exiting' % name
+            except xmlrpclib.Fault as e:
+                msg = ('Failed to stop process %s (RSS %s), exiting: %s' % (name, rss, e))
+                self.stderr.write(str(msg))
+                if self.email:
+                    subject = self.format_subject(
+                        'failed to stop process %s, exiting' % name
                     )
-                self.mail(self.email, subject, msg)
+                    self.mail(self.email, subject, msg)
             raise
 
-        try:
-            self.rpc.supervisor.startProcess(name)
-        except xmlrpclib.Fault as e:
-            msg = ('Failed to start process %s after stopping it, '
-                   'exiting: %s' % (name, e))
-            self.stderr.write(str(msg))
-            if self.email:
-                subject = self.format_subject(
-                    'failed to start process %s, exiting' % name
-                )
-                self.mail(self.email, subject, msg)
-            raise
+        else:
+            self.stderr.write('Restarting %s with supervisor configured signal\n' % name)
+
+            try:
+                self.rpc.supervisor.stopProcess(name)
+            except xmlrpclib.Fault as e:
+                msg = ('Failed to stop process %s (RSS %s), exiting: %s' %
+                       (name, rss, e))
+                self.stderr.write(str(msg))
+                if self.email:
+                    subject = self.format_subject(
+                        'failed to stop process %s, exiting' % name
+                        )
+                    self.mail(self.email, subject, msg)
+                raise
+
+            try:
+                self.rpc.supervisor.startProcess(name)
+            except xmlrpclib.Fault as e:
+                msg = ('Failed to start process %s after stopping it, '
+                       'exiting: %s' % (name, e))
+                self.stderr.write(str(msg))
+                if self.email:
+                    subject = self.format_subject(
+                        'failed to start process %s, exiting' % name
+                    )
+                    self.mail(self.email, subject, msg)
+                raise
 
         if self.email and uptime <= self.email_uptime_limit:
             now = time.asctime()
